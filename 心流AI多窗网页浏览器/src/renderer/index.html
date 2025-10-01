@@ -1,0 +1,1332 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
+    <title>心流AI多窗网页浏览器 - 应觉出品</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 50%, #90caf9 100%);
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        .app-container {
+            display: flex;
+            height: 100vh;
+        }
+        
+        .sidebar {
+            width: 280px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-right: 1px solid rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+        }
+        
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .ai-services {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        
+        .service-item,
+        .custom-service-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 16px;
+            margin-bottom: 8px;
+            background: white;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 1px solid transparent;
+            position: relative;
+        }
+        
+        .service-item:hover,
+        .custom-service-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            border-color: #667eea;
+        }
+        
+        .service-item.active,
+        .custom-service-item.active {
+            background: rgba(102, 126, 234, 0.1);
+            border-color: #667eea;
+        }
+        
+        .service-item.connected::after,
+        .custom-service-item.connected::after {
+            content: '';
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 8px;
+            height: 8px;
+            background: #28a745;
+            border-radius: 50%;
+            box-shadow: 0 0 4px rgba(40, 167, 69, 0.5);
+        }
+        
+        .service-item.error::after,
+        .custom-service-item.error::after {
+            content: '';
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 8px;
+            height: 8px;
+            background: #dc3545;
+            border-radius: 50%;
+            box-shadow: 0 0 4px rgba(220, 53, 69, 0.5);
+        }
+        
+        .service-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            margin-right: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: white;
+        }
+        
+        .service-info {
+            flex: 1;
+        }
+        
+        .service-name {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 2px;
+        }
+        
+        .service-status {
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .add-service-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 12px 16px;
+            margin-bottom: 8px;
+            background: rgba(102, 126, 234, 0.1);
+            border: 2px dashed #667eea;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: #667eea;
+            font-weight: 600;
+        }
+        
+        .add-service-btn:hover {
+            background: rgba(102, 126, 234, 0.2);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+        }
+        
+        .add-service-btn .plus-icon {
+            font-size: 20px;
+            margin-right: 8px;
+        }
+        
+        /* 弹窗样式 */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            backdrop-filter: blur(5px);
+        }
+        
+        .modal-overlay.show {
+            display: flex;
+        }
+        
+        .modal {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            width: 90%;
+            max-width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+            transform: scale(0.9);
+            transition: transform 0.2s ease;
+        }
+        
+        .modal-overlay.show .modal {
+            transform: scale(1);
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .modal-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #999;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: all 0.2s ease;
+        }
+        
+        .modal-close:hover {
+            background: #f5f5f5;
+            color: #666;
+        }
+        
+        .form-group {
+            margin-bottom: 16px;
+        }
+        
+        .form-label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 500;
+            color: #333;
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.2s ease;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .color-picker-group {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 8px;
+        }
+        
+        .color-option {
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+        
+        .color-option:hover {
+            transform: scale(1.1);
+        }
+        
+        .color-option.selected {
+            border-color: #333;
+            transform: scale(1.1);
+        }
+        
+        .modal-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+            margin-top: 24px;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .btn-secondary {
+            background: #f8f9fa !important;
+            color: #333 !important;
+            border: 1px solid #dee2e6 !important;
+        }
+        
+        .btn-secondary:hover {
+            background: #e9ecef !important;
+            border-color: #adb5bd !important;
+        }
+        
+        .btn-primary {
+            background: #667eea !important;
+            color: white !important;
+            border: 1px solid #667eea !important;
+        }
+        
+        .btn-primary:hover {
+            background: #5a6fd8 !important;
+            border-color: #5a6fd8 !important;
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        /* 右键菜单样式 */
+        .context-menu {
+            position: fixed;
+            background: rgba(30, 30, 30, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 8px 0;
+            min-width: 150px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            z-index: 10000;
+            display: none;
+            font-size: 14px;
+        }
+
+        .context-menu-item {
+            display: flex;
+            align-items: center;
+            padding: 10px 16px;
+            color: #fff;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+
+        .context-menu-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .context-menu-icon {
+            margin-right: 10px;
+            font-size: 16px;
+        }
+
+        .context-menu-item:first-child {
+            border-radius: 8px 8px 0 0;
+        }
+
+        .context-menu-item:last-child {
+            border-radius: 0 0 8px 8px;
+        }
+
+        /* 删除服务项的特殊样式 */
+        .context-menu-item.delete-item {
+            color: #ff6b6b;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            margin-top: 4px;
+        }
+
+        .context-menu-item.delete-item:hover {
+            background: rgba(255, 107, 107, 0.2);
+            color: #ff4757;
+        }
+
+        .context-menu-item.delete-item .context-menu-icon {
+            color: #ff6b6b;
+        }
+
+        /* 收回窗口对话框样式 */
+        .popup-windows-list {
+            max-height: 300px;
+            overflow-y: auto;
+            margin: 15px 0;
+        }
+
+        .popup-window-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px;
+            margin-bottom: 8px;
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+        }
+
+        .popup-window-item:hover {
+            background: #e9ecef;
+            border-color: #667eea;
+        }
+
+        .popup-window-info {
+            flex: 1;
+            margin-right: 12px;
+        }
+
+        .popup-window-title {
+            font-weight: 500;
+            color: #333;
+            margin-bottom: 4px;
+        }
+
+        .popup-window-url {
+            font-size: 12px;
+            color: #666;
+            word-break: break-all;
+        }
+
+        .popup-window-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .recall-btn {
+            padding: 6px 12px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background 0.2s ease;
+        }
+
+        .recall-btn:hover {
+            background: #5a67d8;
+        }
+
+        .no-windows-message {
+            text-align: center;
+            color: #666;
+            padding: 20px;
+            font-style: italic;
+        }
+
+        .modal-description {
+            margin: 0 0 15px 0;
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: rgba(255, 255, 255, 0.1);
+            height: 100%;
+            min-height: 0;
+        }
+        
+        .toolbar {
+            height: 60px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+        }
+        
+        .toolbar-left, .toolbar-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .toolbar-center {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .toolbar-btn {
+            background: transparent;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            color: #333;
+            padding: 6px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 14px;
+        }
+        
+        .toolbar-btn:hover {
+            background: rgba(0, 0, 0, 0.05);
+            border-color: rgba(0, 0, 0, 0.2);
+        }
+        
+        .app-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .app-version {
+            font-size: 12px;
+            color: rgba(0, 0, 0, 0.6);
+            background: rgba(0, 0, 0, 0.05);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+        
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            background: rgba(0, 0, 0, 0.02);
+        }
+        
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #28a745;
+            box-shadow: 0 0 4px rgba(40, 167, 69, 0.5);
+        }
+        
+        .status-text {
+            font-size: 12px;
+            color: rgba(0, 0, 0, 0.7);
+        }
+        
+
+        
+        .workspace {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            text-align: center;
+            position: relative;
+        }
+        
+        .welcome-screen {
+            max-width: 600px;
+            padding: 40px;
+        }
+        
+        .welcome-content h2 {
+            font-size: 32px;
+            font-weight: bold;
+            margin-bottom: 16px;
+            color: white;
+        }
+        
+        .welcome-content p {
+            font-size: 16px;
+            opacity: 0.9;
+            line-height: 1.5;
+            margin-bottom: 32px;
+        }
+        
+        .welcome-stats {
+            display: flex;
+            justify-content: center;
+            gap: 32px;
+            margin-bottom: 32px;
+        }
+        
+        .stat-item {
+            text-align: center;
+        }
+        
+        .stat-number {
+            display: block;
+            font-size: 24px;
+            font-weight: bold;
+            color: #fff;
+            margin-bottom: 4px;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.7);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .quick-actions {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+        }
+        
+        .action-btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+        
+        .action-btn.primary {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        
+        .action-btn.primary:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+        
+        .action-btn.secondary {
+            background: transparent;
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        
+        .action-btn.secondary:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateY(-2px);
+        }
+        
+        .status-bar {
+            height: 24px;
+            background: rgba(0, 0, 0, 0.1);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+        
+        .status-left, .status-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        
+        .status-item {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+        
+        .loading {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* 多AI集成界面样式 */
+        .ai-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #f5f5f5;
+            height: 100%;
+            min-height: 0; /* 允许flex子元素收缩 */
+        }
+        
+        .layout-controls {
+            height: 40px;
+            background: rgba(255, 255, 255, 0.9);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+            display: flex;
+            align-items: center;
+            padding: 0 12px;
+            gap: 8px;
+        }
+        
+        .layout-btn {
+            background: transparent;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            color: #333;
+            padding: 6px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 14px;
+            min-width: 32px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .layout-btn:hover {
+            background: rgba(0, 0, 0, 0.05);
+            border-color: rgba(0, 0, 0, 0.2);
+        }
+        
+        .layout-btn.active {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+        
+        .ai-panels {
+            flex: 1;
+            display: grid;
+            gap: 1px;
+            padding: 0;
+            background: transparent;
+            height: 100%;
+            width: 100%;
+            min-height: 0; /* 允许grid子元素收缩 */
+            min-width: 0; /* 允许grid子元素收缩 */
+            overflow: auto; /* 允许滚动条显示 */
+            position: relative; /* 使调整手柄相对容器定位，避免漂移覆盖 */
+        }
+
+        /* 自定义滚动条样式 */
+        .ai-panels::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        .ai-panels::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.05);
+            border-radius: 4px;
+        }
+
+        .ai-panels::-webkit-scrollbar-thumb {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 4px;
+            transition: background 0.2s ease;
+        }
+
+        .ai-panels::-webkit-scrollbar-thumb:hover {
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        .ai-panels::-webkit-scrollbar-corner {
+            background: rgba(0, 0, 0, 0.05);
+        }
+        
+        .ai-panel {
+            background: transparent;
+            border-radius: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            box-shadow: none;
+            position: relative;
+            height: 100%;
+            min-height: 0; /* 允许flex子元素收缩 */
+            border: none;
+        }
+        
+        /* 最大化状态样式 */
+        .ai-panel.maximized {
+            background: #fff;
+            border-radius: 0;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        .ai-panel.maximized .ai-panel-content {
+            height: calc(100vh - 28px);
+        }
+        
+        .ai-panel.maximized .ai-webview {
+            height: 100%;
+        }
+        
+        .ai-panel-header {
+            height: 28px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            display: flex;
+            align-items: center;
+            padding: 0 8px;
+            font-size: 11px;
+            font-weight: 600;
+            position: relative;
+            flex-shrink: 0;
+        }
+        
+        .ai-panel-title {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .ai-panel-controls {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        .panel-control-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            width: 20px;
+            height: 20px;
+            border-radius: 3px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            transition: background 0.2s ease;
+        }
+        
+        .panel-control-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        
+        .ai-panel-content {
+            flex: 1;
+            position: relative;
+            background: transparent;
+            height: 100%;
+            min-height: 0; /* 允许子元素收缩 */
+            overflow: hidden; /* 防止内容溢出 */
+            display: flex;
+            flex-direction: column;
+            margin: 0;
+            padding: 0;
+            /* 为子元素创建独立的层叠上下文，避免被外部覆盖 */
+            isolation: isolate;
+        }
+        
+        .ai-webview {
+            width: 100%;
+            border: none;
+            background: transparent;
+            /* 使用flex布局，移除冲突的display和height属性 */
+            flex: 1;
+            min-height: 0;
+            z-index: 1;
+            pointer-events: auto;
+        }
+        
+        .ai-panel-loading {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: transparent;
+            pointer-events: none;
+            z-index: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 12px;
+        }
+        
+        .panel-loading-spinner {
+            width: 24px;
+            height: 24px;
+            border: 2px solid rgba(0, 0, 0, 0.1);
+            border-top: 2px solid #007bff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        .panel-loading-text {
+            font-size: 12px;
+            color: #666;
+        }
+        
+        /* 布局样式 */
+        .ai-panels.grid-2x2 {
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+        }
+        
+        .ai-panels.vertical-split {
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr;
+        }
+        
+        .ai-panels.horizontal-split {
+            grid-template-columns: 1fr;
+            grid-template-rows: 1fr 1fr;
+        }
+        
+        .ai-panels.single-panel {
+            grid-template-columns: 1fr;
+            grid-template-rows: 1fr;
+        }
+
+        /* 多面板布局 - 支持滚动 */
+        .ai-panels.multi-panel {
+            grid-template-columns: 1fr 1fr;
+            grid-auto-rows: minmax(300px, auto);
+            grid-gap: 1px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            max-height: 100%;
+        }
+
+        .ai-panels.vertical-list {
+            grid-template-columns: 1fr;
+            grid-auto-rows: minmax(300px, auto);
+            grid-gap: 1px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            max-height: 100%;
+        }
+
+        .ai-panels.horizontal-list {
+            grid-template-rows: 1fr;
+            grid-auto-columns: minmax(400px, 1fr);
+            grid-auto-flow: column;
+            grid-gap: 1px;
+        }
+
+        /* 智能网格布局 - 强制2x2x2模式 */
+        .ai-panels.smart-grid-layout {
+            display: grid !important;
+            grid-template-columns: 1fr 1fr !important;
+            grid-auto-rows: 400px !important; /* 固定行高，确保内容超出时显示滚动条 */
+            gap: 10px !important;
+            overflow-y: scroll !important; /* 强制显示滚动条 */
+            overflow-x: hidden !important;
+            max-height: calc(100vh - 140px) !important; /* 减去工具栏和布局控制栏的高度 */
+            height: calc(100vh - 140px) !important;
+            padding: 10px !important;
+            padding-right: 20px !important; /* 为滚动条留出更多空间 */
+            box-sizing: border-box !important;
+            /* 确保滚动条可见 */
+            scrollbar-width: auto !important;
+            scrollbar-color: #888 #f1f1f1 !important;
+        }
+        
+        /* 自定义滚动条样式 */
+        .ai-panels.smart-grid-layout::-webkit-scrollbar {
+            width: 12px !important;
+        }
+        
+        .ai-panels.smart-grid-layout::-webkit-scrollbar-track {
+            background: #f1f1f1 !important;
+            border-radius: 6px !important;
+        }
+        
+        .ai-panels.smart-grid-layout::-webkit-scrollbar-thumb {
+            background: #888 !important;
+            border-radius: 6px !important;
+        }
+        
+        .ai-panels.smart-grid-layout::-webkit-scrollbar-thumb:hover {
+            background: #555 !important;
+        }
+
+        /* 小屏幕布局 */
+        @media (max-width: 900px) {
+            .ai-panels.smart-grid-layout {
+                grid-template-columns: 1fr 1fr !important;
+                grid-auto-rows: 350px !important; /* 小屏幕固定行高 */
+                gap: 5px !important;
+                padding-right: 15px !important; /* 为滚动条留出空间 */
+                max-height: calc(100vh - 120px) !important;
+                height: calc(100vh - 120px) !important;
+            }
+        }
+
+        /* 大屏幕布局 */
+        @media (min-width: 1600px) {
+            .ai-panels.smart-grid-layout {
+                grid-template-columns: 1fr 1fr !important;
+                grid-auto-rows: 450px !important; /* 大屏幕固定行高 */
+                gap: 15px !important;
+                padding-right: 25px !important; /* 大屏幕更多滚动条空间 */
+                max-height: calc(100vh - 150px) !important;
+                height: calc(100vh - 150px) !important;
+            }
+        }
+        
+        /* 拖拽调整大小 */
+        .resize-handle {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.1);
+            z-index: 10;
+            pointer-events: none; /* 默认不拦截事件，仅拖拽时启用 */
+        }
+        
+        .resize-handle:hover {
+            background: rgba(0, 0, 0, 0.2);
+        }
+        
+        .resize-handle.horizontal {
+            height: 4px;
+            left: 0;
+            right: 0;
+            cursor: ns-resize;
+        }
+        
+        .resize-handle.vertical {
+            width: 4px;
+            top: 0;
+            bottom: 0;
+            cursor: ew-resize;
+        }
+        
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .ai-panels.grid-2x2 {
+                grid-template-columns: 1fr;
+                grid-template-rows: repeat(4, 1fr);
+            }
+            
+            .ai-panels.vertical-split {
+                grid-template-columns: 1fr;
+                grid-template-rows: 1fr 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">心流AI多窗网页浏览器</div>
+                <div class="subtitle">应觉出品 - 集成多个AI服务的智能浏览器</div>
+            </div>
+            <div class="ai-services" id="aiServices">
+                <!-- AI服务列表将在这里动态生成 -->
+            </div>
+        </div>
+        
+        <div class="main-content">
+            <div class="toolbar">
+                <div class="toolbar-left">
+                    <button class="toolbar-btn" id="refreshBtn" title="刷新当前服务">
+                        <span>🔄</span>
+                    </button>
+                    <button class="toolbar-btn" id="settingsBtn" title="应用设置">
+                        <span>⚙️</span>
+                    </button>
+                    <button class="toolbar-btn" id="testBtn" title="测试适配器">
+                        <span>🧪</span>
+                    </button>
+                    <button class="toolbar-btn" id="recallWindowBtn" title="收回弹出窗口">
+                        <span>📥</span>
+                    </button>
+                </div>
+                <div class="toolbar-center">
+                    <span class="app-title">心流AI多窗网页浏览器</span>
+                    <span class="app-version">v1.0.0</span>
+                </div>
+                <div class="toolbar-right">
+                    <div class="connection-status" id="connectionStatus">
+                        <span class="status-indicator"></span>
+                        <span class="status-text">就绪</span>
+                    </div>
+                    <button class="toolbar-btn" id="minimizeBtn" title="最小化">
+                        <span>➖</span>
+                    </button>
+                    <button class="toolbar-btn" id="closeBtn" title="关闭">
+                        <span>❌</span>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="workspace" id="workspace">
+                <div class="welcome-screen" id="welcomeScreen">
+                    <div class="welcome-content">
+                        <h2>🤖 欢迎使用心流AI多窗网页浏览器</h2>
+                        <p>在一个应用中同时使用多个AI服务，提升您的工作效率</p>
+                        <div class="welcome-stats">
+                            <div class="stat-item">
+                                <span class="stat-number" id="totalServices">4</span>
+                                <span class="stat-label">可用服务</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-number" id="activeServices">0</span>
+                                <span class="stat-label">活跃连接</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-number" id="totalMessages">0</span>
+                                <span class="stat-label">消息总数</span>
+                            </div>
+                        </div>
+                        <div class="quick-actions">
+                            <button class="action-btn primary" id="quickStartBtn">
+                                <span>🚀</span>
+                                快速开始
+                            </button>
+                            <button class="action-btn secondary" id="openTestBtn">
+                                <span>🧪</span>
+                                测试适配器
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 多AI集成容器 -->
+                <div class="ai-container" id="aiContainer" style="display: none;">
+                    <div class="layout-controls">
+                        <button class="layout-btn" id="layoutGrid" title="网格布局">⊞</button>
+                        <button class="layout-btn" id="layoutVertical" title="垂直分割">⫿</button>
+                        <button class="layout-btn" id="layoutHorizontal" title="水平分割">⫾</button>
+                        <button class="layout-btn" id="layoutList" title="列表布局">☰</button>
+                        <button class="layout-btn" id="layoutCustom" title="自定义布局">⚏</button>
+                        <button class="layout-btn" id="resetLayout" title="重置布局">↻</button>
+                    </div>
+                    <div class="ai-panels" id="aiPanels">
+                        <!-- AI服务面板将在这里动态生成 -->
+                    </div>
+                </div>
+            </div>
+            
+            <div class="status-bar">
+                <div class="status-left">
+                    <span class="status-item" id="adapterStatus">适配器: 未初始化</span>
+                    <span class="status-item" id="memoryUsage">内存: --</span>
+                </div>
+                <div class="status-right">
+                    <span class="status-item" id="currentTime"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="loading" id="loading">
+        <div class="loading-spinner"></div>
+    </div>
+    
+    <!-- AI适配器脚本 -->
+    <script src="../adapters/base-adapter.js"></script>
+    <script src="../adapters/chatgpt-adapter.js"></script>
+    <script src="../adapters/claude-adapter.js"></script>
+    <script src="../adapters/gemini-adapter.js"></script>
+    <script src="../adapters/copilot-adapter.js"></script>
+    <script src="../adapters/adapter-manager.js"></script>
+    
+    <!-- 加载通知系统和错误处理 -->
+    <script src="notification-system.js"></script>
+    <script src="error-handler.js"></script>
+    <script src="validation-system.js"></script>
+    
+    <!-- 加载性能优化系统 -->
+    <script src="performance-monitor.js"></script>
+    <script src="memory-optimizer.js"></script>
+    <script src="resource-optimizer.js"></script>
+    
+    <!-- 设置管理系统 -->
+    <script src="settings-manager.js"></script>
+    <script src="settings-ui.js"></script>
+    
+    <!-- 添加新AI服务弹窗 -->
+    <div class="modal-overlay" id="addServiceModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">添加新的AI服务</h3>
+                <button class="modal-close" id="closeAddServiceModal">×</button>
+            </div>
+            <form id="addServiceForm">
+                <div class="form-group">
+                    <label class="form-label" for="serviceName">服务名称</label>
+                    <input type="text" id="serviceName" name="serviceName" class="form-input" placeholder="例如：GPT-4" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="serviceUrl">服务网址</label>
+                    <input type="url" id="serviceUrl" name="serviceUrl" class="form-input" placeholder="例如：https://chat.openai.com" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="serviceIcon">图标字母</label>
+                    <input type="text" id="serviceIcon" name="serviceIcon" class="form-input" placeholder="例如：G" maxlength="2" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">图标颜色</label>
+                    <div class="color-picker-group">
+                        <div class="color-option selected" data-color="#667eea" style="background-color: #667eea;">A</div>
+                        <div class="color-option" data-color="#764ba2" style="background-color: #764ba2;">B</div>
+                        <div class="color-option" data-color="#f093fb" style="background-color: #f093fb;">C</div>
+                        <div class="color-option" data-color="#4facfe" style="background-color: #4facfe;">D</div>
+                        <div class="color-option" data-color="#43e97b" style="background-color: #43e97b;">E</div>
+                        <div class="color-option" data-color="#fa709a" style="background-color: #fa709a;">F</div>
+                        <div class="color-option" data-color="#ffecd2" style="background-color: #ffecd2; color: #333;">G</div>
+                        <div class="color-option" data-color="#a8edea" style="background-color: #a8edea; color: #333;">H</div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">
+                        <input type="checkbox" id="incognitoMode" name="incognitoMode" style="margin-right: 8px;">
+                        无痕模式
+                    </label>
+                    <div class="form-description" style="font-size: 12px; color: #666; margin-top: 4px;">
+                        启用后，关闭服务时将自动清除所有浏览和登录痕迹
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="cancelAddService">取消</button>
+                    <button type="submit" class="btn btn-primary">添加服务</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 右键菜单 -->
+    <div id="contextMenu" class="context-menu">
+        <div class="context-menu-item" id="editService">
+            <span class="context-menu-icon">✏️</span>
+            <span>编辑服务</span>
+        </div>
+        <div class="context-menu-item delete-item" id="deleteService">
+            <span class="context-menu-icon">🗑️</span>
+            <span>删除服务</span>
+        </div>
+    </div>
+
+    <!-- 编辑服务弹窗 -->
+    <div id="editServiceModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">编辑AI服务</h3>
+                <button class="modal-close" id="closeEditServiceModal">×</button>
+            </div>
+            <form id="editServiceForm">
+                <div class="form-group">
+                    <label class="form-label" for="editServiceName">服务名称</label>
+                    <input type="text" id="editServiceName" name="serviceName" class="form-input" placeholder="例如：GPT-4" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="editServiceUrl">服务网址</label>
+                    <input type="url" id="editServiceUrl" name="serviceUrl" class="form-input" placeholder="例如：https://chat.openai.com" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="editServiceIcon">图标字母</label>
+                    <input type="text" id="editServiceIcon" name="serviceIcon" class="form-input" placeholder="例如：G" maxlength="2" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">图标颜色</label>
+                    <div class="color-picker-group" id="editColorPicker">
+                        <div class="color-option" data-color="#667eea" style="background-color: #667eea;">A</div>
+                        <div class="color-option" data-color="#764ba2" style="background-color: #764ba2;">B</div>
+                        <div class="color-option" data-color="#f093fb" style="background-color: #f093fb;">C</div>
+                        <div class="color-option" data-color="#4facfe" style="background-color: #4facfe;">D</div>
+                        <div class="color-option" data-color="#43e97b" style="background-color: #43e97b;">E</div>
+                        <div class="color-option" data-color="#fa709a" style="background-color: #fa709a;">F</div>
+                        <div class="color-option" data-color="#ffecd2" style="background-color: #ffecd2; color: #333;">G</div>
+                        <div class="color-option" data-color="#a8edea" style="background-color: #a8edea; color: #333;">H</div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">
+                        <input type="checkbox" id="editIncognitoMode" name="incognitoMode" style="margin-right: 8px;">
+                        无痕模式
+                    </label>
+                    <div class="form-description" style="font-size: 12px; color: #666; margin-top: 4px;">
+                        启用后，关闭服务时将自动清除所有浏览和登录痕迹
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="cancelEditService">取消</button>
+                    <button type="submit" class="btn btn-primary">保存修改</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 收回窗口对话框 -->
+    <div id="recallWindowModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">收回弹出窗口</h3>
+                <button class="modal-close" id="closeRecallWindowModal">×</button>
+            </div>
+            <div class="modal-content">
+                <p class="modal-description">选择要收回到主应用中的窗口：</p>
+                <div id="popupWindowsList" class="popup-windows-list">
+                    <div class="no-windows-message">当前没有弹出窗口</div>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" id="cancelRecallWindow">取消</button>
+                <button type="button" class="btn btn-primary" id="refreshWindowsList">刷新列表</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 应用脚本 -->
+    <script src="app.js"></script>
+</body>
+</html>

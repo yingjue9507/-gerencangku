@@ -1,0 +1,103 @@
+{
+  "name": "xinliu-ai-multi-window-browser",
+  "version": "1.0.0",
+  "description": "心流AI多窗网页浏览器 - 应觉出品，基于Electron的多窗口AI浏览器，集成多个AI服务",
+  "main": "src/main/main.js",
+  "homepage": "./",
+  "scripts": {
+    "start": "cross-env NODE_ENV=development electron .",
+    "dev": "concurrently \"npm run dev:renderer\" \"wait-on http://localhost:3000 && electron .\"",
+    "dev:renderer": "cd src/renderer && npm start",
+    "build": "npm run build:renderer && electron-builder",
+    "build:renderer": "cd src/renderer && npm run build",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "keywords": [
+    "electron",
+    "ai",
+    "browser",
+    "chatgpt",
+    "claude",
+    "gemini",
+    "multi-ai"
+  ],
+  "author": "应觉出品",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "cross-env": "^10.1.0",
+    "electron": "^27.0.0",
+    "electron-builder": "^24.6.4",
+    "wait-on": "^7.0.1"
+  },
+  "dependencies": {
+    "electron-store": "^8.1.0",
+    "electron-updater": "^6.1.4"
+  },
+  "build": {
+    "appId": "com.aibrowser.multiaiapp",
+    "productName": "多AI集成浏览器",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "node_modules/**/*",
+      "package.json",
+      "!node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+      "!node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+      "!node_modules/*.d.ts",
+      "!node_modules/.bin",
+      "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}",
+      "!.editorconfig",
+      "!**/._*",
+      "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.gitignore,.gitattributes}",
+      "!**/{__pycache__,thumbs.db,.flowconfig,.idea,.vs,.nyc_output}",
+      "!**/{appveyor.yml,.travis.yml,circle.yml}",
+      "!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json}",
+      "!dist/**/*",
+      "!portable-app/**/*",
+      "!docs/**/*",
+      "!build-manual.js",
+      "!create-portable.js"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.svg",
+      "requestedExecutionLevel": "asInvoker",
+      "sign": false,
+      "publisherName": "AI Browser Team"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "多AI集成浏览器",
+      "installerIcon": "build/icon.svg",
+      "uninstallerIcon": "build/icon.svg",
+      "installerHeaderIcon": "build/icon.svg",
+      "deleteAppDataOnUninstall": true,
+      "runAfterFinish": true,
+      "menuCategory": "Internet",
+      "include": "build/installer.nsh"
+    },
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.svg"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "build/icon.svg"
+    }
+  }
+}
