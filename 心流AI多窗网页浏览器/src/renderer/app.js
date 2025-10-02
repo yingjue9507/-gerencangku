@@ -6,6 +6,12 @@ class MultiAIBrowser {
         this.config = {};
         this.currentLayout = 'grid-2x2'; // 当前布局模式
         
+        // 初始化安全管理器
+        this.securityManager = new SecurityManager();
+        
+        // 初始化网络管理器
+        this.networkManager = null;
+        
         // 加载保存的布局设置
         this.loadLayoutConfig();
         
@@ -28,13 +34,18 @@ class MultiAIBrowser {
             console.log('步骤2: 初始化计数器');
             this.messageCount = 0;
             
+            // 初始化网络管理器
+            console.log('步骤3: 初始化网络管理器');
+            this.initializeNetworkManager();
+            console.log('网络管理器初始化完成');
+            
             // 初始化性能优化系统
-            console.log('步骤3: 初始化性能优化系统');
+            console.log('步骤4: 初始化性能优化系统');
             this.initializePerformanceOptimization();
             console.log('性能优化系统初始化完成');
             
             // 初始化适配器管理器
-            console.log('步骤4: 检查并初始化适配器管理器');
+            console.log('步骤5: 检查并初始化适配器管理器');
             if (typeof adapterManager !== 'undefined') {
                 console.log('适配器管理器存在，开始初始化...');
                 await adapterManager.initialize();
@@ -44,34 +55,46 @@ class MultiAIBrowser {
             }
             
             // 加载配置
-            console.log('步骤5: 加载配置');
+            console.log('步骤6: 加载配置');
             await this.loadConfig();
             console.log('配置加载完成');
             
             // 初始化UI
-            console.log('步骤6: 初始化UI');
+            console.log('步骤7: 初始化UI');
             this.initUI();
             console.log('UI初始化完成');
             
             // 加载已有的AI窗口
-            console.log('步骤7: 加载已有的AI窗口');
+            console.log('步骤8: 加载已有的AI窗口');
             await this.loadAIWindows();
             console.log('AI窗口加载完成');
             
-            console.log('步骤8: 更新连接状态');
+            console.log('步骤9: 更新连接状态');
             this.updateConnectionStatus('ready', '就绪');
             
             // 初始化右键菜单
-            console.log('步骤9: 初始化右键菜单');
+            console.log('步骤10: 初始化右键菜单');
             if (typeof initializeContextMenu === 'function') {
                 initializeContextMenu();
             }
             
             // 转换加载通知为成功通知
-            console.log('步骤10: 转换初始化通知为成功状态');
+            console.log('步骤11: 转换初始化通知为成功状态');
             console.log('转换通知ID:', initNotificationId);
             notificationSystem.convertLoading(initNotificationId, 'success', '应用程序初始化完成');
             console.log('初始化通知已转换为成功状态');
+            
+            // 触发应用初始化完成事件，通知错误处理器和性能监控器
+            console.log('步骤12: 触发应用初始化完成事件');
+            
+            // 设置全局标志
+            window.appInitialized = true;
+            
+            const appInitializedEvent = new CustomEvent('appInitialized', {
+                detail: { timestamp: Date.now() }
+            });
+            document.dispatchEvent(appInitializedEvent);
+            console.log('应用初始化完成事件已触发');
             
             console.log('心流AI多窗网页浏览器初始化完成');
         } catch (error) {
@@ -332,15 +355,23 @@ class MultiAIBrowser {
             this.config = this.getDefaultConfig();
         }
 
-        this.config.aiServices.forEach(service => {
+        // 加载用户自定义的排序
+        this.loadServiceOrder();
+
+        this.config.aiServices.forEach((service, index) => {
             if (!service.enabled) return;
 
             const serviceElement = document.createElement('div');
             // 根据是否为自定义服务设置不同的CSS类
             serviceElement.className = service.isCustom ? 'custom-service-item' : 'service-item';
             serviceElement.dataset.serviceId = service.id;
+            serviceElement.dataset.originalIndex = index;
+            
+            // 添加拖拽属性
+            serviceElement.draggable = true;
             
             serviceElement.innerHTML = `
+                <div class="drag-handle">⋮⋮</div>
                 <div class="service-icon" style="background-color: ${service.icon}">
                     ${service.name.charAt(0)}
                 </div>
@@ -350,7 +381,14 @@ class MultiAIBrowser {
                 </div>
             `;
 
-            serviceElement.addEventListener('click', () => {
+            // 添加拖拽事件监听器
+            this.addDragEventListeners(serviceElement);
+
+            serviceElement.addEventListener('click', (e) => {
+                // 如果点击的是拖拽手柄，不触发打开服务
+                if (e.target.classList.contains('drag-handle')) {
+                    return;
+                }
                 this.openAIService(service);
             });
 
@@ -377,6 +415,130 @@ class MultiAIBrowser {
             setTimeout(() => {
                 window.contextMenuManager.refreshContextMenuBindings();
             }, 100);
+        }
+    }
+
+    // 添加拖拽事件监听器
+    addDragEventListeners(element) {
+        element.addEventListener('dragstart', (e) => {
+            this.draggedElement = element;
+            element.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/html', element.outerHTML);
+        });
+
+        element.addEventListener('dragend', (e) => {
+            element.classList.remove('dragging');
+            this.draggedElement = null;
+            // 移除所有拖拽指示器
+            document.querySelectorAll('.drag-over').forEach(el => {
+                el.classList.remove('drag-over');
+            });
+        });
+
+        element.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            
+            if (this.draggedElement && this.draggedElement !== element) {
+                element.classList.add('drag-over');
+            }
+        });
+
+        element.addEventListener('dragleave', (e) => {
+            element.classList.remove('drag-over');
+        });
+
+        element.addEventListener('drop', (e) => {
+            e.preventDefault();
+            element.classList.remove('drag-over');
+            
+            if (this.draggedElement && this.draggedElement !== element) {
+                this.handleDrop(this.draggedElement, element);
+            }
+        });
+    }
+
+    // 处理拖拽放置
+    handleDrop(draggedElement, targetElement) {
+        const draggedServiceId = draggedElement.dataset.serviceId;
+        const targetServiceId = targetElement.dataset.serviceId;
+        
+        // 获取当前服务列表
+        const services = this.config.aiServices.filter(service => service.enabled);
+        
+        // 找到被拖拽和目标服务的索引
+        const draggedIndex = services.findIndex(service => service.id === draggedServiceId);
+        const targetIndex = services.findIndex(service => service.id === targetServiceId);
+        
+        if (draggedIndex !== -1 && targetIndex !== -1) {
+            // 重新排序服务列表
+            const draggedService = services[draggedIndex];
+            services.splice(draggedIndex, 1);
+            services.splice(targetIndex, 0, draggedService);
+            
+            // 更新配置中的服务顺序
+            this.updateServiceOrder(services);
+            
+            // 重新渲染服务列表
+            this.renderAIServices();
+            
+            console.log(`服务 ${draggedService.name} 已移动到 ${services[targetIndex].name} 的位置`);
+        }
+    }
+
+    // 更新服务顺序
+    updateServiceOrder(newOrderedServices) {
+        // 保持禁用的服务在原位置，只重新排序启用的服务
+        const enabledServices = newOrderedServices;
+        const disabledServices = this.config.aiServices.filter(service => !service.enabled);
+        
+        // 合并启用和禁用的服务
+        this.config.aiServices = [...enabledServices, ...disabledServices];
+        
+        // 保存到本地存储
+        this.saveServiceOrder();
+        this.saveConfig();
+    }
+
+    // 保存服务排序到本地存储
+    saveServiceOrder() {
+        try {
+            const serviceOrder = this.config.aiServices.map(service => service.id);
+            localStorage.setItem('aiServiceOrder', JSON.stringify(serviceOrder));
+            console.log('服务排序已保存到本地存储');
+        } catch (error) {
+            console.error('保存服务排序失败:', error);
+        }
+    }
+
+    // 从本地存储加载服务排序
+    loadServiceOrder() {
+        try {
+            const savedOrder = localStorage.getItem('aiServiceOrder');
+            if (savedOrder) {
+                const orderArray = JSON.parse(savedOrder);
+                
+                // 根据保存的顺序重新排序服务
+                const orderedServices = [];
+                const remainingServices = [...this.config.aiServices];
+                
+                // 按照保存的顺序添加服务
+                orderArray.forEach(serviceId => {
+                    const serviceIndex = remainingServices.findIndex(service => service.id === serviceId);
+                    if (serviceIndex !== -1) {
+                        orderedServices.push(remainingServices.splice(serviceIndex, 1)[0]);
+                    }
+                });
+                
+                // 添加任何新的服务（不在保存的顺序中的）
+                orderedServices.push(...remainingServices);
+                
+                this.config.aiServices = orderedServices;
+                console.log('已从本地存储加载服务排序');
+            }
+        } catch (error) {
+            console.error('加载服务排序失败:', error);
         }
     }
 
@@ -471,6 +633,20 @@ class MultiAIBrowser {
                 return;
             }
             
+            // 检查是否为谷歌服务，如果是则提供独立窗口选项
+            const isGoogleService = service.url && (
+                service.url.includes('google.com') || 
+                service.url.includes('gemini.google.com') ||
+                service.url.includes('bard.google.com')
+            );
+            
+            if (isGoogleService) {
+                // 谷歌服务默认使用增强的webview，提供更好的嵌入体验
+                console.log(`正在为 ${service.name} 启用增强反检测模式...`);
+                // 可以在这里添加特殊的webview配置或预处理
+                // 独立窗口功能保留，但不默认提示（可通过设置或右键菜单访问）
+            }
+            
             // 创建AI面板
             const panel = this.createAIPanel(service);
             this.aiPanels.set(service.id, panel);
@@ -561,10 +737,11 @@ class MultiAIBrowser {
         // 设置webview基本样式，避免在加载事件前出现被遮挡的空白区域
         webview.style.background = 'transparent';
         webview.style.backgroundColor = 'transparent';
-        webview.setAttribute('nodeintegration', 'false');
-        webview.setAttribute('websecurity', 'true'); // 改为true以提高安全性
+        
+        // 使用安全管理器配置webview
+        this.securityManager.configureWebview(webview, service);
+        
         webview.setAttribute('allowpopups', 'true');
-        webview.setAttribute('webpreferences', 'contextIsolation=true,nodeIntegration=false,sandbox=false');
         
         // 根据无痕模式设置分区
         if (service.incognitoMode) {
@@ -577,10 +754,6 @@ class MultiAIBrowser {
             const partitionId = this.getPersistentServiceId(service);
             webview.setAttribute('partition', `persist:${partitionId}`);
         }
-        
-        // 设置User-Agent以避免被检测为自动化工具
-        const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-        webview.setAttribute('useragent', userAgent);
         
         // 直接设置src
         webview.src = service.url;
@@ -616,6 +789,9 @@ class MultiAIBrowser {
 
         // webview加载完成后隐藏loading
         webview.addEventListener('dom-ready', () => {
+            // 使用安全管理器注入反检测脚本
+            this.securityManager.injectAntiDetection(webview, service);
+            
             // 检查页面标题，判断是否被重定向到Google登录页面
             webview.executeJavaScript('document.title').then(title => {
                 console.log(`${service.name} 页面标题:`, title);
@@ -648,11 +824,6 @@ class MultiAIBrowser {
             
             // 为Gemini等服务启用输入事件处理
             this.enableInputEvents(webview, service.id);
-            
-            // 针对Gemini的特殊处理
-            if (service.id === 'gemini') {
-                this.setupGeminiAntiDetection(webview);
-            }
         });
 
         webview.addEventListener('did-fail-load', (event) => {
@@ -753,6 +924,524 @@ class MultiAIBrowser {
             console.log('Gemini反检测设置完成');
         } catch (error) {
             console.error('Gemini反检测设置失败:', error);
+        }
+    }
+
+    injectBrowserFeatures(webview, service) {
+        try {
+            console.log(`为${service.name}注入现代浏览器特性...`);
+            
+            const browserFeaturesScript = `
+                (function() {
+                    // 增强Chrome对象
+                    if (!window.chrome) {
+                        window.chrome = {};
+                    }
+                    
+                    // 添加Chrome运行时API
+                    window.chrome.runtime = window.chrome.runtime || {
+                        onConnect: { addListener: function() {} },
+                        onMessage: { addListener: function() {} },
+                        sendMessage: function() {},
+                        connect: function() { return { postMessage: function() {}, onMessage: { addListener: function() {} } }; },
+                        getManifest: function() { return { version: '131.0.0.0' }; },
+                        getURL: function(path) { return 'chrome-extension://fake/' + path; },
+                        id: 'fake-extension-id'
+                    };
+                    
+                    // 添加Chrome应用API
+                    window.chrome.app = window.chrome.app || {
+                        isInstalled: false,
+                        InstallState: { DISABLED: 'disabled', INSTALLED: 'installed', NOT_INSTALLED: 'not_installed' },
+                        RunningState: { CANNOT_RUN: 'cannot_run', READY_TO_RUN: 'ready_to_run', RUNNING: 'running' }
+                    };
+                    
+                    // 增强Navigator对象
+                    Object.defineProperty(navigator, 'webdriver', {
+                        get: () => undefined,
+                        configurable: true
+                    });
+                    
+                    // 添加更多插件信息
+                    const mockPlugins = [
+                        { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
+                        { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '' },
+                        { name: 'Native Client', filename: 'internal-nacl-plugin', description: '' }
+                    ];
+                    
+                    Object.defineProperty(navigator, 'plugins', {
+                        get: () => mockPlugins,
+                        configurable: true
+                    });
+                    
+                    // 添加语言信息
+                    Object.defineProperty(navigator, 'languages', {
+                        get: () => ['zh-CN', 'zh', 'en-US', 'en'],
+                        configurable: true
+                    });
+                    
+                    // 添加连接信息
+                    Object.defineProperty(navigator, 'connection', {
+                        get: () => ({
+                            effectiveType: '4g',
+                            rtt: 50,
+                            downlink: 10,
+                            saveData: false
+                        }),
+                        configurable: true
+                    });
+                    
+                    // 添加设备内存信息
+                    Object.defineProperty(navigator, 'deviceMemory', {
+                        get: () => 8,
+                        configurable: true
+                    });
+                    
+                    // 添加硬件并发信息
+                    Object.defineProperty(navigator, 'hardwareConcurrency', {
+                        get: () => 8,
+                        configurable: true
+                    });
+                    
+                    // 添加权限API
+                    if (!navigator.permissions) {
+                        navigator.permissions = {
+                            query: function(permission) {
+                                return Promise.resolve({ state: 'granted' });
+                            }
+                        };
+                    }
+                    
+                    // 添加媒体设备API
+                    if (!navigator.mediaDevices) {
+                        navigator.mediaDevices = {
+                            enumerateDevices: function() {
+                                return Promise.resolve([
+                                    { deviceId: 'default', kind: 'audioinput', label: 'Default - 麦克风 (Realtek Audio)' },
+                                    { deviceId: 'default', kind: 'audiooutput', label: 'Default - 扬声器 (Realtek Audio)' },
+                                    { deviceId: 'default', kind: 'videoinput', label: 'Default - 摄像头' }
+                                ]);
+                            },
+                            getUserMedia: function() { return Promise.reject(new Error('Permission denied')); }
+                        };
+                    }
+                    
+                    // 添加WebGL支持检测
+                    const canvas = document.createElement('canvas');
+                    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                    if (gl) {
+                        const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+                        if (debugInfo) {
+                            Object.defineProperty(gl, 'UNMASKED_VENDOR_WEBGL', { value: debugInfo.UNMASKED_VENDOR_WEBGL });
+                            Object.defineProperty(gl, 'UNMASKED_RENDERER_WEBGL', { value: debugInfo.UNMASKED_RENDERER_WEBGL });
+                        }
+                    }
+                    
+                    // 添加屏幕信息
+                    Object.defineProperty(screen, 'colorDepth', {
+                        get: () => 24,
+                        configurable: true
+                    });
+                    
+                    Object.defineProperty(screen, 'pixelDepth', {
+                        get: () => 24,
+                        configurable: true
+                    });
+                    
+                    // 移除Electron/Webview特征
+                    delete window.webview;
+                    delete window.electron;
+                    delete window.electronAPI;
+                    delete window.require;
+                    delete window.module;
+                    delete window.exports;
+                    delete window.global;
+                    delete window.process;
+                    
+                    // 深层webview检测对抗 - 伪装window层级关系
+                    try {
+                        // 伪装window.parent和window.top，让页面认为它在顶级窗口中
+                        Object.defineProperty(window, 'parent', {
+                            get: () => window,
+                            configurable: false
+                        });
+                        
+                        Object.defineProperty(window, 'top', {
+                            get: () => window,
+                            configurable: false
+                        });
+                        
+                        // 伪装window.frameElement，让页面认为它不在iframe中
+                        Object.defineProperty(window, 'frameElement', {
+                            get: () => null,
+                            configurable: false
+                        });
+                        
+                        // 伪装window.frames，模拟顶级窗口
+                        Object.defineProperty(window, 'frames', {
+                            get: () => window,
+                            configurable: false
+                        });
+                        
+                        // 伪装window.length，表示没有子框架
+                        Object.defineProperty(window, 'length', {
+                            get: () => 0,
+                            configurable: false
+                        });
+                        
+                        // 伪装document.domain
+                        try {
+                            Object.defineProperty(document, 'domain', {
+                                get: () => window.location.hostname,
+                                set: () => {},
+                                configurable: false
+                            });
+                        } catch(e) {}
+                        
+                        // 伪装window.opener
+                        Object.defineProperty(window, 'opener', {
+                            get: () => null,
+                            configurable: false
+                        });
+                        
+                        // 移除webview特有的事件和方法
+                        delete window.postMessage;
+                        window.postMessage = function(message, targetOrigin) {
+                            // 模拟正常的postMessage行为
+                            console.log('PostMessage intercepted:', message, targetOrigin);
+                        };
+                        
+                        // 伪装window.name
+                        Object.defineProperty(window, 'name', {
+                            get: () => '',
+                            set: () => {},
+                            configurable: false
+                        });
+                        
+                        // 检测并移除可能暴露webview的属性
+                        const webviewProps = ['webkitStorageInfo', 'webkitIndexedDB', 'webkitRequestFileSystem'];
+                        webviewProps.forEach(prop => {
+                            if (window[prop]) {
+                                delete window[prop];
+                            }
+                        });
+                        
+                        // 伪装document.referrer
+                        Object.defineProperty(document, 'referrer', {
+                            get: () => '',
+                            configurable: false
+                        });
+                        
+                        // 伪装window.history
+                        const originalHistory = window.history;
+                        Object.defineProperty(window, 'history', {
+                            get: () => ({
+                                length: 1,
+                                state: null,
+                                back: () => {},
+                                forward: () => {},
+                                go: () => {},
+                                pushState: originalHistory.pushState.bind(originalHistory),
+                                replaceState: originalHistory.replaceState.bind(originalHistory)
+                            }),
+                            configurable: false
+                        });
+                        
+                        console.log('深层webview检测对抗已激活');
+                    } catch (error) {
+                        console.warn('部分webview对抗功能设置失败:', error);
+                    }
+                    
+                    // 添加真实浏览器的window属性
+                    if (!window.speechSynthesis) {
+                        window.speechSynthesis = {
+                            getVoices: function() { return []; },
+                            speak: function() {},
+                            cancel: function() {},
+                            pause: function() {},
+                            resume: function() {}
+                        };
+                    }
+                    
+                    // 添加Notification API
+                    if (!window.Notification) {
+                        window.Notification = function() {};
+                        window.Notification.permission = 'default';
+                        window.Notification.requestPermission = function() { return Promise.resolve('default'); };
+                    }
+                    
+                    console.log('现代浏览器特性注入完成 - ${service.name}');
+                })();
+            `;
+            
+            webview.executeJavaScript(browserFeaturesScript);
+            console.log(`${service.name} 现代浏览器特性注入完成`);
+        } catch (error) {
+            console.error(`${service.name} 浏览器特性注入失败:`, error);
+        }
+    }
+
+    injectAdvancedAntiDetection(webview, service) {
+        try {
+            console.log(`为${service.name}注入高级反检测特性...`);
+            
+            const advancedAntiDetectionScript = `
+                (function() {
+                    // 高级Canvas指纹伪装
+                    const originalGetContext = HTMLCanvasElement.prototype.getContext;
+                    HTMLCanvasElement.prototype.getContext = function(contextType, contextAttributes) {
+                        const context = originalGetContext.call(this, contextType, contextAttributes);
+                        
+                        if (contextType === '2d') {
+                            const originalFillText = context.fillText;
+                            context.fillText = function(text, x, y, maxWidth) {
+                                // 添加微小的随机偏移来避免指纹识别
+                                const offset = Math.random() * 0.1 - 0.05;
+                                return originalFillText.call(this, text, x + offset, y + offset, maxWidth);
+                            };
+                        }
+                        
+                        return context;
+                    };
+                    
+                    // WebGL指纹伪装
+                    const originalGetParameter = WebGLRenderingContext.prototype.getParameter;
+                    WebGLRenderingContext.prototype.getParameter = function(parameter) {
+                        // 伪装GPU信息
+                        if (parameter === this.RENDERER) {
+                            return 'ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0, D3D11)';
+                        }
+                        if (parameter === this.VENDOR) {
+                            return 'Google Inc. (Intel)';
+                        }
+                        return originalGetParameter.call(this, parameter);
+                    };
+                    
+                    // AudioContext指纹伪装
+                    if (window.AudioContext || window.webkitAudioContext) {
+                        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                        const originalCreateAnalyser = AudioContextClass.prototype.createAnalyser;
+                        AudioContextClass.prototype.createAnalyser = function() {
+                            const analyser = originalCreateAnalyser.call(this);
+                            const originalGetFloatFrequencyData = analyser.getFloatFrequencyData;
+                            analyser.getFloatFrequencyData = function(array) {
+                                originalGetFloatFrequencyData.call(this, array);
+                                // 添加微小的噪声
+                                for (let i = 0; i < array.length; i++) {
+                                    array[i] += Math.random() * 0.001 - 0.0005;
+                                }
+                            };
+                            return analyser;
+                        };
+                    }
+                    
+                    // 字体检测对抗
+                    const originalOffsetWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth');
+                    const originalOffsetHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight');
+                    
+                    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+                        get: function() {
+                            const width = originalOffsetWidth.get.call(this);
+                            // 为字体检测添加微小的随机变化
+                            if (this.style && this.style.fontFamily) {
+                                return width + Math.floor(Math.random() * 3) - 1;
+                            }
+                            return width;
+                        }
+                    });
+                    
+                    Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+                        get: function() {
+                            const height = originalOffsetHeight.get.call(this);
+                            if (this.style && this.style.fontFamily) {
+                                return height + Math.floor(Math.random() * 3) - 1;
+                            }
+                            return height;
+                        }
+                    });
+                    
+                    // 时区检测对抗
+                    const originalGetTimezoneOffset = Date.prototype.getTimezoneOffset;
+                    Date.prototype.getTimezoneOffset = function() {
+                        return -480; // 固定为中国时区 UTC+8
+                    };
+                    
+                    // 语言检测增强
+                    Object.defineProperty(navigator, 'language', {
+                        get: () => 'zh-CN',
+                        configurable: true
+                    });
+                    
+                    // 屏幕分辨率伪装
+                    Object.defineProperty(screen, 'width', {
+                        get: () => 1920,
+                        configurable: true
+                    });
+                    
+                    Object.defineProperty(screen, 'height', {
+                        get: () => 1080,
+                        configurable: true
+                    });
+                    
+                    Object.defineProperty(screen, 'availWidth', {
+                        get: () => 1920,
+                        configurable: true
+                    });
+                    
+                    Object.defineProperty(screen, 'availHeight', {
+                        get: () => 1040,
+                        configurable: true
+                    });
+                    
+                    // 触摸设备检测对抗
+                    Object.defineProperty(navigator, 'maxTouchPoints', {
+                        get: () => 0,
+                        configurable: true
+                    });
+                    
+                    // 电池API移除（避免指纹识别）
+                    delete navigator.getBattery;
+                    
+                    // 网络连接API伪装
+                    Object.defineProperty(navigator, 'onLine', {
+                        get: () => true,
+                        configurable: true
+                    });
+                    
+                    // 内存信息伪装
+                    if (performance.memory) {
+                        Object.defineProperty(performance.memory, 'jsHeapSizeLimit', {
+                            get: () => 2172649472,
+                            configurable: true
+                        });
+                    }
+                    
+                    // 移除可能暴露webview的事件监听器
+                    const originalAddEventListener = window.addEventListener;
+                    window.addEventListener = function(type, listener, options) {
+                        // 过滤掉可能暴露webview的事件
+                        const blockedEvents = ['beforeunload', 'unload'];
+                        if (blockedEvents.includes(type)) {
+                            return;
+                        }
+                        return originalAddEventListener.call(this, type, listener, options);
+                    };
+                    
+                    // 谷歌特定的反检测措施
+                    // 1. 伪装Chrome浏览器特征
+                    Object.defineProperty(navigator, 'vendor', {
+                        get: () => 'Google Inc.',
+                        configurable: true
+                    });
+                    
+                    Object.defineProperty(navigator, 'productSub', {
+                        get: () => '20030107',
+                        configurable: true
+                    });
+                    
+                    // 2. 伪装Chrome版本信息
+                    Object.defineProperty(navigator, 'appVersion', {
+                        get: () => '5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        configurable: true
+                    });
+                    
+                    // 3. 添加Chrome特有的API
+                    if (!window.chrome) {
+                        window.chrome = {
+                            runtime: {
+                                onConnect: null,
+                                onMessage: null
+                            },
+                            app: {
+                                isInstalled: false
+                            }
+                        };
+                    }
+                    
+                    // 4. 伪装插件信息
+                    Object.defineProperty(navigator, 'plugins', {
+                        get: () => {
+                            const plugins = [
+                                {
+                                    name: 'Chrome PDF Plugin',
+                                    filename: 'internal-pdf-viewer',
+                                    description: 'Portable Document Format'
+                                },
+                                {
+                                    name: 'Chrome PDF Viewer',
+                                    filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai',
+                                    description: ''
+                                },
+                                {
+                                    name: 'Native Client',
+                                    filename: 'internal-nacl-plugin',
+                                    description: ''
+                                }
+                            ];
+                            return plugins;
+                        },
+                        configurable: true
+                    });
+                    
+                    // 5. 移除webview特有的属性
+                    delete window.webview;
+                    delete window.electronAPI;
+                    
+                    // 6. 伪装权限API
+                    if (navigator.permissions) {
+                        const originalQuery = navigator.permissions.query;
+                        navigator.permissions.query = function(permissionDesc) {
+                            // 对于某些权限，返回granted状态以模拟正常浏览器
+                            if (permissionDesc.name === 'notifications') {
+                                return Promise.resolve({ state: 'granted' });
+                            }
+                            return originalQuery.call(this, permissionDesc);
+                        };
+                    }
+                    
+                    // 7. 伪装WebRTC API
+                    if (window.RTCPeerConnection) {
+                        const originalCreateDataChannel = RTCPeerConnection.prototype.createDataChannel;
+                        RTCPeerConnection.prototype.createDataChannel = function(label, dataChannelDict) {
+                            // 正常创建数据通道，但添加一些延迟来模拟真实网络
+                            const channel = originalCreateDataChannel.call(this, label, dataChannelDict);
+                            return channel;
+                        };
+                    }
+                    
+                    // 8. 伪装Notification API
+                    if (window.Notification) {
+                        Object.defineProperty(Notification, 'permission', {
+                            get: () => 'granted',
+                            configurable: true
+                        });
+                    }
+                    
+                    // 9. 伪装存储API
+                    if (navigator.storage && navigator.storage.estimate) {
+                        const originalEstimate = navigator.storage.estimate;
+                        navigator.storage.estimate = function() {
+                            return originalEstimate.call(this).then(estimate => ({
+                                quota: 120000000000, // 120GB
+                                usage: 50000000000,  // 50GB
+                                usageDetails: estimate.usageDetails || {}
+                            }));
+                        };
+                    }
+                    
+                    // 10. 移除可能暴露自动化的痕迹
+                    delete window.cdc_adoQpoasnfa76pfcZLmcfl_Array;
+                    delete window.cdc_adoQpoasnfa76pfcZLmcfl_Promise;
+                    delete window.cdc_adoQpoasnfa76pfcZLmcfl_Symbol;
+                    
+                    console.log('高级反检测特性注入完成（包含谷歌特定优化）');
+                })();
+            `;
+            
+            webview.executeJavaScript(advancedAntiDetectionScript);
+            console.log(`${service.name} 高级反检测特性注入完成`);
+        } catch (error) {
+            console.error(`${service.name} 高级反检测特性注入失败:`, error);
         }
     }
 
@@ -906,30 +1595,134 @@ class MultiAIBrowser {
     }
 
     closePanel(serviceId) {
-        const panel = this.aiPanels.get(serviceId);
-        if (panel) {
+        try {
+            const panel = this.aiPanels.get(serviceId);
+            if (!panel) {
+                console.warn(`尝试关闭不存在的面板: ${serviceId}`);
+                return false;
+            }
+
+            console.log(`🗑️ 开始关闭面板: ${serviceId}`);
+
             // 如果是无痕模式，清理会话数据
-            if (panel.service.incognitoMode) {
-                this.clearIncognitoData(panel.webview, panel.service);
+            if (panel.service && panel.service.incognitoMode) {
+                try {
+                    this.clearIncognitoData(panel.webview, panel.service);
+                    console.log(`✅ 无痕模式数据已清理: ${serviceId}`);
+                } catch (error) {
+                    console.warn(`⚠️ 清理无痕数据失败: ${serviceId}`, error);
+                }
             }
-            
-            // 移除面板
-            if (panel.element && panel.element.parentNode) {
-                panel.element.parentNode.removeChild(panel.element);
+
+            // 清理webview事件监听器
+            if (panel.webview) {
+                try {
+                    // 移除所有事件监听器
+                    panel.webview.removeAllListeners();
+                    
+                    // 停止加载
+                    if (panel.webview.stop) {
+                        panel.webview.stop();
+                    }
+                    
+                    // 清理webview内容
+                    if (panel.webview.getWebContents) {
+                        const webContents = panel.webview.getWebContents();
+                        if (webContents && !webContents.isDestroyed()) {
+                            webContents.removeAllListeners();
+                        }
+                    }
+                    
+                    console.log(`✅ Webview事件监听器已清理: ${serviceId}`);
+                } catch (error) {
+                    console.warn(`⚠️ 清理webview事件监听器失败: ${serviceId}`, error);
+                }
             }
-            
+
+            // 移除DOM元素
+            if (panel.element) {
+                try {
+                    // 移除元素上的事件监听器
+                    const clonedElement = panel.element.cloneNode(true);
+                    if (panel.element.parentNode) {
+                        panel.element.parentNode.replaceChild(clonedElement, panel.element);
+                        clonedElement.parentNode.removeChild(clonedElement);
+                    }
+                    console.log(`✅ DOM元素已移除: ${serviceId}`);
+                } catch (error) {
+                    console.warn(`⚠️ 移除DOM元素失败: ${serviceId}`, error);
+                    // 备用方法
+                    try {
+                        if (panel.element.parentNode) {
+                            panel.element.parentNode.removeChild(panel.element);
+                        }
+                    } catch (fallbackError) {
+                        console.error(`❌ 备用移除方法也失败: ${serviceId}`, fallbackError);
+                    }
+                }
+            }
+
             // 从映射中删除
             this.aiPanels.delete(serviceId);
             
+            // 同时从旧的aiWindows映射中删除（兼容性）
+            if (this.aiWindows && this.aiWindows.has(serviceId)) {
+                this.aiWindows.delete(serviceId);
+            }
+
             // 更新服务状态
-            this.updateServiceStatus(serviceId, '未连接');
-            
+            try {
+                this.updateServiceStatus(serviceId, '未连接');
+            } catch (error) {
+                console.warn(`⚠️ 更新服务状态失败: ${serviceId}`, error);
+            }
+
             // 更新布局
-            this.updateLayout();
-            
+            try {
+                this.updateLayout();
+            } catch (error) {
+                console.warn(`⚠️ 更新布局失败: ${serviceId}`, error);
+            }
+
             // 显示通知
-            const modeText = panel.service.incognitoMode ? ' (无痕模式数据已清理)' : '';
-            notificationSystem.info(`${panel.service.name} 已关闭${modeText}`);
+            try {
+                const serviceName = panel.service ? panel.service.name : serviceId;
+                const modeText = panel.service && panel.service.incognitoMode ? ' (无痕模式数据已清理)' : '';
+                notificationSystem.info(`${serviceName} 已关闭${modeText}`);
+            } catch (error) {
+                console.warn(`⚠️ 显示关闭通知失败: ${serviceId}`, error);
+            }
+
+            console.log(`✅ 面板关闭完成: ${serviceId}`);
+            return true;
+
+        } catch (error) {
+            console.error(`❌ 关闭面板时发生错误: ${serviceId}`, error);
+            
+            // 即使出错也要尝试从映射中移除
+            try {
+                this.aiPanels.delete(serviceId);
+                if (this.aiWindows && this.aiWindows.has(serviceId)) {
+                    this.aiWindows.delete(serviceId);
+                }
+            } catch (cleanupError) {
+                console.error(`❌ 清理映射失败: ${serviceId}`, cleanupError);
+            }
+
+            // 记录错误
+            if (typeof errorHandler !== 'undefined') {
+                errorHandler.handleError({
+                    type: 'javascript',
+                    message: `关闭面板失败: ${error.message}`,
+                    context: { 
+                        operation: 'close_panel',
+                        serviceId: serviceId
+                    },
+                    error
+                });
+            }
+
+            return false;
         }
     }
 
@@ -1493,6 +2286,23 @@ class MultiAIBrowser {
             console.log('配置保存成功');
         } catch (error) {
             console.error('配置保存失败:', error);
+        }
+    }
+
+    initializeNetworkManager() {
+        console.log('初始化网络管理器...');
+        
+        try {
+            // 初始化网络管理器
+            if (typeof NetworkManager !== 'undefined') {
+                this.networkManager = new NetworkManager();
+                window.networkManager = this.networkManager;
+                console.log('网络管理器初始化完成');
+            } else {
+                console.warn('NetworkManager未定义，跳过网络管理器初始化');
+            }
+        } catch (error) {
+            console.error('网络管理器初始化失败:', error);
         }
     }
 
@@ -2196,6 +3006,114 @@ class MultiAIBrowser {
             console.error('加载自定义服务失败:', error);
         }
     }
+
+    // 应用清理方法
+    cleanup() {
+        try {
+            console.log('🧹 开始清理应用资源...');
+
+            // 清理所有AI面板
+            if (this.aiPanels && this.aiPanels.size > 0) {
+                console.log(`🗑️ 清理 ${this.aiPanels.size} 个AI面板...`);
+                const panelIds = Array.from(this.aiPanels.keys());
+                panelIds.forEach(serviceId => {
+                    try {
+                        this.closePanel(serviceId);
+                    } catch (error) {
+                        console.warn(`⚠️ 清理面板失败: ${serviceId}`, error);
+                    }
+                });
+            }
+
+            // 清理事件监听器
+            try {
+                // 移除窗口事件监听器
+                if (this.onWindowFocus) {
+                    window.removeEventListener('focus', this.onWindowFocus);
+                }
+                if (this.onWindowBlur) {
+                    window.removeEventListener('blur', this.onWindowBlur);
+                }
+                if (this.handleWindowResize) {
+                    window.removeEventListener('resize', this.handleWindowResize);
+                }
+                
+                // 移除文档事件监听器
+                if (this.onPageVisible) {
+                    document.removeEventListener('visibilitychange', this.onPageVisible);
+                }
+                if (this.handlePerformanceUpdate) {
+                    document.removeEventListener('performanceUpdate', this.handlePerformanceUpdate);
+                }
+                if (this.handleMemoryWarning) {
+                    document.removeEventListener('memoryWarning', this.handleMemoryWarning);
+                }
+                if (this.reducePollingFrequency) {
+                    document.removeEventListener('reducePolling', this.reducePollingFrequency);
+                }
+                
+                console.log('✅ 事件监听器已清理');
+            } catch (error) {
+                console.warn('⚠️ 清理事件监听器失败:', error);
+            }
+
+            // 清理性能监控
+            try {
+                if (typeof performanceMonitor !== 'undefined' && performanceMonitor.cleanup) {
+                    performanceMonitor.cleanup();
+                }
+                if (typeof memoryOptimizer !== 'undefined' && memoryOptimizer.cleanup) {
+                    memoryOptimizer.cleanup();
+                }
+                console.log('✅ 性能监控已清理');
+            } catch (error) {
+                console.warn('⚠️ 清理性能监控失败:', error);
+            }
+
+            // 清理适配器管理器
+            try {
+                if (typeof adapterManager !== 'undefined' && adapterManager.cleanup) {
+                    adapterManager.cleanup();
+                }
+                console.log('✅ 适配器管理器已清理');
+            } catch (error) {
+                console.warn('⚠️ 清理适配器管理器失败:', error);
+            }
+
+            // 清理定时器
+            try {
+                if (this.statusUpdateInterval) {
+                    clearInterval(this.statusUpdateInterval);
+                    this.statusUpdateInterval = null;
+                }
+                console.log('✅ 定时器已清理');
+            } catch (error) {
+                console.warn('⚠️ 清理定时器失败:', error);
+            }
+
+            // 清理映射和引用
+            try {
+                if (this.aiPanels) {
+                    this.aiPanels.clear();
+                }
+                if (this.aiWindows) {
+                    this.aiWindows.clear();
+                }
+                console.log('✅ 映射和引用已清理');
+            } catch (error) {
+                console.warn('⚠️ 清理映射失败:', error);
+            }
+
+            console.log('✅ 应用资源清理完成');
+        } catch (error) {
+            console.error('❌ 应用清理过程中发生错误:', error);
+        }
+    }
+
+    // 在页面卸载前清理资源
+    beforeUnload() {
+        this.cleanup();
+    }
 }
 
 // 测试函数 - 验证DOM元素和事件绑定
@@ -2242,6 +3160,21 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // 为HTML内联事件处理器提供全局引用
         window.multiAIBrowser = window.app;
+        
+        // 添加页面卸载事件监听器
+        window.addEventListener('beforeunload', () => {
+            if (window.app && typeof window.app.beforeUnload === 'function') {
+                window.app.beforeUnload();
+            }
+        });
+        
+        // 添加页面隐藏事件监听器（用于处理标签页关闭等情况）
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && window.app && typeof window.app.cleanup === 'function') {
+                // 页面被隐藏时进行轻量级清理
+                console.log('页面被隐藏，执行轻量级清理...');
+            }
+        });
     }, 100);
 });
 
@@ -2600,4 +3533,138 @@ function initializeContextMenu() {
         };
     }
     console.log('右键菜单管理器初始化完成');
+}
+
+// 显示谷歌服务打开方式选择对话框
+function showGoogleServiceDialog(service) {
+    return new Promise((resolve) => {
+        // 创建对话框HTML
+        const dialogHTML = `
+            <div id="google-service-dialog" class="modal-overlay" style="
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.5);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                z-index: 10000;
+            ">
+                <div class="modal-content" style="
+                    background: white;
+                    padding: 30px;
+                    border-radius: 10px;
+                    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+                    max-width: 500px;
+                    width: 90%;
+                    text-align: center;
+                ">
+                    <h3 style="margin-bottom: 20px; color: #333;">选择打开方式</h3>
+                    <p style="margin-bottom: 30px; color: #666; line-height: 1.5;">
+                        检测到您要打开谷歌服务。为了避免"此浏览器或应用可能不安全"的错误，建议在独立窗口中打开。
+                    </p>
+                    <div style="display: flex; gap: 15px; justify-content: center;">
+                        <button id="open-in-window" style="
+                            background: #4285f4;
+                            color: white;
+                            border: none;
+                            padding: 12px 24px;
+                            border-radius: 6px;
+                            cursor: pointer;
+                            font-size: 14px;
+                            font-weight: 500;
+                        ">独立窗口（推荐）</button>
+                        <button id="open-in-webview" style="
+                            background: #f8f9fa;
+                            color: #333;
+                            border: 1px solid #dadce0;
+                            padding: 12px 24px;
+                            border-radius: 6px;
+                            cursor: pointer;
+                            font-size: 14px;
+                        ">内嵌窗口</button>
+                        <button id="cancel-open" style="
+                            background: #ea4335;
+                            color: white;
+                            border: none;
+                            padding: 12px 24px;
+                            border-radius: 6px;
+                            cursor: pointer;
+                            font-size: 14px;
+                        ">取消</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // 添加对话框到页面
+        document.body.insertAdjacentHTML('beforeend', dialogHTML);
+        
+        const dialog = document.getElementById('google-service-dialog');
+        const openInWindowBtn = document.getElementById('open-in-window');
+        const openInWebviewBtn = document.getElementById('open-in-webview');
+        const cancelBtn = document.getElementById('cancel-open');
+
+        // 绑定事件
+        openInWindowBtn.addEventListener('click', () => {
+            dialog.remove();
+            resolve('window');
+        });
+
+        openInWebviewBtn.addEventListener('click', () => {
+            dialog.remove();
+            resolve('webview');
+        });
+
+        cancelBtn.addEventListener('click', () => {
+            dialog.remove();
+            resolve('cancel');
+        });
+
+        // 点击背景关闭
+        dialog.addEventListener('click', (e) => {
+            if (e.target === dialog) {
+                dialog.remove();
+                resolve('cancel');
+            }
+        });
+    });
+}
+
+// 在独立窗口中打开谷歌服务
+async function openGoogleServiceInWindow(service) {
+    try {
+        console.log('在独立窗口中打开谷歌服务:', service.name);
+        
+        // 通过IPC调用主进程创建独立窗口
+        if (window.electronAPI && window.electronAPI.createAIWindow) {
+            const windowConfig = {
+                url: service.url,
+                title: `${service.name} - 心流AI浏览器`,
+                width: 1200,
+                height: 800,
+                webPreferences: {
+                    nodeIntegration: false,
+                    contextIsolation: true,
+                    webSecurity: true,
+                    allowRunningInsecureContent: false,
+                    experimentalFeatures: false
+                }
+            };
+            
+            await window.electronAPI.createAIWindow(windowConfig);
+            console.log('谷歌服务独立窗口创建成功');
+        } else {
+            console.error('electronAPI不可用，无法创建独立窗口');
+            // 降级到webview方案
+            return false;
+        }
+        
+        return true;
+    } catch (error) {
+        console.error('创建谷歌服务独立窗口失败:', error);
+        return false;
+    }
 }

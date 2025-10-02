@@ -75,16 +75,28 @@ class AIBrowserApp {
         minWidth: 800,
         minHeight: 600,
         webPreferences: {
-          nodeIntegration: false,
-          contextIsolation: true,
-          enableRemoteModule: false,
-          webSecurity: false, // 允许webview加载外部网站
-          allowRunningInsecureContent: true,
-          webviewTag: true, // 启用webview标签支持
-          experimentalFeatures: true, // 启用实验性功能
-          plugins: true, // 启用插件支持
-          preload: path.join(__dirname, 'preload.js')
-        },
+        nodeIntegration: false,
+        contextIsolation: true,
+        enableRemoteModule: false,
+        webSecurity: false, // 允许webview加载外部网站
+        allowRunningInsecureContent: true,
+        webviewTag: true, // 启用webview标签支持
+        experimentalFeatures: true, // 启用实验性功能
+        plugins: true, // 启用插件支持
+        preload: path.join(__dirname, 'preload.js'),
+        // 增强安全配置
+        spellcheck: false, // 禁用拼写检查以减少指纹识别
+        backgroundThrottling: false, // 禁用后台节流
+        offscreen: false, // 禁用离屏渲染
+        // 反检测配置
+        additionalArguments: [
+          '--disable-blink-features=AutomationControlled',
+          '--disable-features=VizDisplayCompositor',
+          '--disable-web-security',
+          '--disable-features=TranslateUI',
+          '--disable-ipc-flooding-protection'
+        ]
+      },
         titleBarStyle: 'default',
         show: false
       });
@@ -141,6 +153,12 @@ class AIBrowserApp {
 
       this.mainWindow.webContents.on('crashed', (event, killed) => {
         console.error('💥 Renderer process crashed:', { killed });
+      });
+
+      // 监听渲染进程的控制台消息
+      this.mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+        const logLevel = ['verbose', 'info', 'warning', 'error'][level] || 'info';
+        console.log(`[Renderer ${logLevel.toUpperCase()}] ${message} (${sourceId}:${line})`);
       });
 
     } catch (error) {
@@ -340,7 +358,21 @@ class AIBrowserApp {
         contextIsolation: true,
         webSecurity: false, // 允许跨域请求
         allowRunningInsecureContent: true,
-        preload: path.join(__dirname, 'ai-preload.js')
+        preload: path.join(__dirname, 'ai-preload.js'),
+        // 增强安全配置
+        spellcheck: false, // 禁用拼写检查以减少指纹识别
+        backgroundThrottling: false, // 禁用后台节流
+        offscreen: false, // 禁用离屏渲染
+        // 反检测配置
+        additionalArguments: [
+          '--disable-blink-features=AutomationControlled',
+          '--disable-features=VizDisplayCompositor',
+          '--disable-web-security',
+          '--disable-features=TranslateUI',
+          '--disable-ipc-flooding-protection',
+          '--no-first-run',
+          '--no-default-browser-check'
+        ]
       },
       title: config.title || 'AI服务窗口',
       show: false
@@ -371,14 +403,7 @@ class AIBrowserApp {
     return windowId;
   }
 
-  closeAIWindow(windowId) {
-    const windowData = this.aiWindows.get(windowId);
-    if (windowData && windowData.window && !windowData.window.isDestroyed()) {
-      windowData.window.close();
-      return true;
-    }
-    return false;
-  }
+  // closeAIWindow方法已在下方重新定义，包含更好的资源清理
 
   recallPopupWindow(windowId) {
     const windowData = this.popupWindows.get(windowId);
@@ -409,6 +434,8 @@ class AIBrowserApp {
     // 当所有窗口关闭时
     app.on('window-all-closed', () => {
       if (process.platform !== 'darwin') {
+        // 在退出前清理所有资源
+        this.cleanup();
         app.quit();
       }
     });
@@ -417,6 +444,59 @@ class AIBrowserApp {
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         this.createMainWindow();
+      }
+    });
+
+    // 应用即将退出时的清理
+    app.on('before-quit', (event) => {
+      console.log('🧹 Application is about to quit, performing cleanup...');
+      this.cleanup();
+    });
+
+    // 处理应用意外退出
+    app.on('will-quit', (event) => {
+      console.log('🔄 Application will quit, final cleanup...');
+      this.cleanup();
+    });
+
+    // 处理第二个实例
+    app.on('second-instance', () => {
+      if (this.mainWindow) {
+        if (this.mainWindow.isMinimized()) {
+          this.mainWindow.restore();
+        }
+        this.mainWindow.focus();
+      }
+    });
+
+    // 处理证书错误 - 专门针对谷歌登录优化
+    app.on('certificate-error', (event, webContents, url, error, certificate, callback) => {
+      console.log('Certificate error for URL:', url, 'Error:', error);
+      
+      // 对于谷歌相关域名，采用更宽松的证书验证
+      const googleDomains = [
+        'accounts.google.com',
+        'oauth2.googleapis.com', 
+        'www.googleapis.com',
+        'ssl.gstatic.com',
+        'fonts.googleapis.com',
+        'apis.google.com'
+      ];
+      
+      const isGoogleDomain = googleDomains.some(domain => url.includes(domain));
+      
+      if (isGoogleDomain) {
+        console.log('允许谷歌域名的证书错误:', url);
+        event.preventDefault();
+        callback(true);
+      } else if (process.env.NODE_ENV === 'development') {
+        // 开发环境忽略所有证书错误
+        event.preventDefault();
+        callback(true);
+      } else {
+        // 其他域名严格验证证书
+        console.log('拒绝证书错误:', url, error);
+        callback(false);
       }
     });
 
@@ -481,7 +561,8 @@ class AIBrowserApp {
             });
 
             // 现代浏览器 UA，避免显式暴露 Electron 特征
-            const MODERN_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+            // 固定使用最新的谷歌Chrome浏览器标识
+const MODERN_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
             // 加载URL到弹出窗口并指定 UA
             try {
@@ -653,6 +734,101 @@ class AIBrowserApp {
       }
       return { success: false, error: 'Window does not exist' };
     });
+  }
+
+  // 应用清理方法
+  cleanup() {
+    try {
+      console.log('🧹 Starting application cleanup...');
+      
+      // 清理所有AI窗口
+      if (this.aiWindows && this.aiWindows.size > 0) {
+        console.log(`🗑️ Cleaning up ${this.aiWindows.size} AI windows...`);
+        for (const [windowId, windowData] of this.aiWindows.entries()) {
+          try {
+            if (windowData.window && !windowData.window.isDestroyed()) {
+              windowData.window.removeAllListeners();
+              windowData.window.close();
+            }
+          } catch (error) {
+            console.warn(`⚠️ Failed to cleanup AI window ${windowId}:`, error.message);
+          }
+        }
+        this.aiWindows.clear();
+      }
+
+      // 清理所有弹出窗口
+      if (this.popupWindows && this.popupWindows.size > 0) {
+        console.log(`🗑️ Cleaning up ${this.popupWindows.size} popup windows...`);
+        for (const [windowId, windowData] of this.popupWindows.entries()) {
+          try {
+            if (windowData.window && !windowData.window.isDestroyed()) {
+              windowData.window.removeAllListeners();
+              windowData.window.close();
+            }
+          } catch (error) {
+            console.warn(`⚠️ Failed to cleanup popup window ${windowId}:`, error.message);
+          }
+        }
+        this.popupWindows.clear();
+      }
+
+      // 清理主窗口
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        console.log('🗑️ Cleaning up main window...');
+        try {
+          this.mainWindow.removeAllListeners();
+        } catch (error) {
+          console.warn('⚠️ Failed to remove main window listeners:', error.message);
+        }
+      }
+
+      // 清理IPC监听器
+      try {
+        ipcMain.removeAllListeners();
+        console.log('✅ IPC listeners cleaned up');
+      } catch (error) {
+        console.warn('⚠️ Failed to cleanup IPC listeners:', error.message);
+      }
+
+      // 清理会话数据（可选，根据需要）
+      try {
+        const defaultSession = session.defaultSession;
+        if (defaultSession) {
+          // 清理缓存和临时数据
+          defaultSession.clearCache().catch(err => 
+            console.warn('⚠️ Failed to clear session cache:', err.message)
+          );
+        }
+      } catch (error) {
+        console.warn('⚠️ Failed to cleanup session data:', error.message);
+      }
+
+      console.log('✅ Application cleanup completed');
+    } catch (error) {
+      console.error('❌ Error during application cleanup:', error);
+    }
+  }
+
+  // 优化窗口关闭处理
+  closeAIWindow(windowId) {
+    const windowData = this.aiWindows.get(windowId);
+    if (windowData && windowData.window && !windowData.window.isDestroyed()) {
+      try {
+        // 移除事件监听器防止内存泄漏
+        windowData.window.removeAllListeners();
+        windowData.window.close();
+        this.aiWindows.delete(windowId);
+        console.log(`✅ AI window ${windowId} closed and cleaned up`);
+        return true;
+      } catch (error) {
+        console.error(`❌ Failed to close AI window ${windowId}:`, error);
+        // 即使关闭失败也要从Map中移除
+        this.aiWindows.delete(windowId);
+        return false;
+      }
+    }
+    return false;
   }
 }
 

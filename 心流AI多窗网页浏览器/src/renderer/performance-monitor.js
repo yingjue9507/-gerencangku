@@ -515,13 +515,26 @@ class PerformanceMonitor {
 // 创建全局实例
 const performanceMonitor = new PerformanceMonitor();
 
-// 自动启动监控
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
+// 等待应用初始化完成后再启动监控
+function startPerformanceMonitoringWhenReady() {
+    // 监听应用初始化完成事件
+    document.addEventListener('appInitialized', () => {
+        console.log('[PerformanceMonitor] 应用初始化完成，开始性能监控');
         performanceMonitor.startMonitoring();
     });
+    
+    // 如果应用已经初始化完成（防止错过事件）
+    if (window.appInitialized) {
+        console.log('[PerformanceMonitor] 应用已初始化，立即开始性能监控');
+        performanceMonitor.startMonitoring();
+    }
+}
+
+// 在DOM准备好后设置监听器
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', startPerformanceMonitoringWhenReady);
 } else {
-    performanceMonitor.startMonitoring();
+    startPerformanceMonitoringWhenReady();
 }
 
 // 导出供其他模块使用

@@ -1,7 +1,7 @@
 {
   "name": "xinliu-ai-multi-window-browser",
-  "version": "1.0.0",
-  "description": "心流AI多窗网页浏览器 - 应觉出品，基于Electron的多窗口AI浏览器，集成多个AI服务",
+  "version": "2.0.0",
+  "description": "心流AI多窗网页浏览器 - 应觉出品，基于Electron的多窗口AI浏览器，集成多个AI服务，具备智能内存管理和性能监控功能",
   "main": "src/main/main.js",
   "homepage": "./",
   "scripts": {
@@ -12,7 +12,9 @@
     "build:renderer": "cd src/renderer && npm run build",
     "pack": "electron-builder --dir",
     "dist": "electron-builder",
-    "postinstall": "electron-builder install-app-deps"
+    "postinstall": "electron-builder install-app-deps",
+    "test:intelligent": "node -e \"console.log('请在浏览器控制台中运行: window.testIntelligentFeatures.runAllTests()')\"",
+    "docs": "echo '文档已生成在项目根目录下的 .md 文件中'"
   },
   "keywords": [
     "electron",
@@ -21,7 +23,12 @@
     "chatgpt",
     "claude",
     "gemini",
-    "multi-ai"
+    "multi-ai",
+    "memory-optimization",
+    "performance-monitoring",
+    "intelligent-analysis",
+    "auto-cleanup",
+    "system-health"
   ],
   "author": "应觉出品",
   "license": "MIT",

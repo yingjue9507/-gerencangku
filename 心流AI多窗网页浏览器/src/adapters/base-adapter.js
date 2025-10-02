@@ -53,6 +53,14 @@ class BaseAdapter {
                 throw new Error('Adapter not initialized');
             }
             
+            // 检查网络状态
+            if (typeof window !== 'undefined' && window.networkManager) {
+                const networkStatus = await window.networkManager.checkNetworkStatus();
+                if (!networkStatus.isOnline) {
+                    throw new Error('Network is offline');
+                }
+            }
+            
             const response = await this.doSendMessage(message);
             const duration = performance.now() - startTime;
             
@@ -74,6 +82,14 @@ class BaseAdapter {
             }
             
             console.error(`Failed to send message in ${this.config.name}:`, error);
+            
+            // 使用网络管理器处理网络错误
+            if (typeof window !== 'undefined' && window.networkManager) {
+                const isNetworkError = window.networkManager.isNetworkError(error);
+                if (isNetworkError) {
+                    await window.networkManager.handleNetworkError(error, `${this.config.name}_sendMessage`);
+                }
+            }
             
             // 使用错误处理器处理发送消息错误
             if (typeof errorHandler !== 'undefined') {
@@ -219,9 +235,19 @@ class BaseAdapter {
     }
 
     /**
-     * 重试机制
+     * 重试机制 - 集成网络管理器
      */
     async retry(operation, maxRetries = this.maxRetries) {
+        // 如果网络管理器可用，使用其重试机制
+        if (typeof window !== 'undefined' && window.networkManager) {
+            return await window.networkManager.retryRequest(operation, {
+                maxRetries,
+                retryDelay: this.retryDelay,
+                context: `${this.config.name}_adapter`
+            });
+        }
+        
+        // 回退到原有重试机制
         let lastError;
         
         for (let i = 0; i <= maxRetries; i++) {

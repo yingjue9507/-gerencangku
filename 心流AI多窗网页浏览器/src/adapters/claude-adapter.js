@@ -83,16 +83,167 @@ class ClaudeAdapter extends BaseAdapter {
             throw new Error('Please login to Claude first');
         }
         
-        // 检查是否有访问限制或验证码
-        const antiAutomation = await this.detectAntiAutomation();
+        // 增强的反自动化检测
+        const antiAutomation = await this.detectAntiAutomationEnhanced();
         if (antiAutomation.detected) {
-            throw new Error(`Anti-automation detected: ${antiAutomation.type}`);
+            this.log('warn', `反自动化检测触发: ${antiAutomation.type}`, antiAutomation);
+            
+            // 尝试处理反自动化检测
+            const handled = await this.handleAntiAutomation(antiAutomation);
+            if (!handled) {
+                throw new Error(`Anti-automation detected: ${antiAutomation.type}`);
+            }
         }
         
         // 检查是否有使用限制提示
         const limitWarning = document.querySelector('[data-testid="usage-limit"], .usage-warning, .rate-limit');
         if (limitWarning) {
             this.log('warn', 'Usage limit warning detected', limitWarning.textContent);
+        }
+    }
+
+    // 增强的反自动化检测
+    async detectAntiAutomationEnhanced() {
+        const indicators = [
+            // 验证码相关
+            'iframe[src*="captcha"]',
+            '[class*="captcha"]',
+            '[id*="captcha"]',
+            '[data-testid*="captcha"]',
+            
+            // 人机验证相关
+            '[class*="challenge"]',
+            '[id*="challenge"]',
+            '[data-testid*="challenge"]',
+            'div:contains("正在验证您是否是真人")',
+            'div:contains("Verifying you are human")',
+            'div:contains("Please verify")',
+            'div:contains("Security check")',
+            
+            // Cloudflare相关
+            '[class*="cloudflare"]',
+            '[id*="cloudflare"]',
+            'div:contains("Checking your browser")',
+            'div:contains("DDoS protection")',
+            
+            // 访问限制相关
+            '[class*="blocked"]',
+            '[class*="forbidden"]',
+            '[class*="access-denied"]',
+            'div:contains("Access denied")',
+            'div:contains("Forbidden")',
+            'div:contains("Rate limited")',
+            
+            // Claude特定的检测
+            'div:contains("这可能需要几秒钟时间")',
+            'div:contains("This may take a few seconds")',
+            '[data-testid="verification"]',
+            '[aria-label*="verification"]'
+        ];
+        
+        for (const selector of indicators) {
+            let element = null;
+            
+            // 处理包含文本的选择器
+            if (selector.includes(':contains(')) {
+                const text = selector.match(/:contains\("([^"]+)"\)/)[1];
+                element = Array.from(document.querySelectorAll('div, span, p')).find(el => 
+                    el.textContent && el.textContent.includes(text)
+                );
+            } else {
+                element = document.querySelector(selector);
+            }
+            
+            if (element) {
+                return {
+                    detected: true,
+                    type: selector,
+                    element: element,
+                    text: element.textContent || '',
+                    isVisible: this.isElementVisible(element)
+                };
+            }
+        }
+        
+        // 检查页面标题
+        const title = document.title.toLowerCase();
+        if (title.includes('verification') || title.includes('challenge') || 
+            title.includes('captcha') || title.includes('security')) {
+            return {
+                detected: true,
+                type: 'page_title',
+                element: null,
+                text: document.title,
+                isVisible: true
+            };
+        }
+        
+        return { detected: false };
+    }
+
+    // 检查元素是否可见
+    isElementVisible(element) {
+        if (!element) return false;
+        
+        const style = window.getComputedStyle(element);
+        return style.display !== 'none' && 
+               style.visibility !== 'hidden' && 
+               style.opacity !== '0' &&
+               element.offsetParent !== null;
+    }
+
+    // 处理反自动化检测
+    async handleAntiAutomation(antiAutomation) {
+        this.log('info', '尝试处理反自动化检测...', antiAutomation);
+        
+        try {
+            // 如果是验证页面，等待验证完成
+            if (antiAutomation.type.includes('verification') || 
+                antiAutomation.type.includes('challenge') ||
+                antiAutomation.text.includes('正在验证') ||
+                antiAutomation.text.includes('Verifying')) {
+                
+                this.log('info', '检测到验证页面，等待验证完成...');
+                
+                // 等待验证完成，最多等待30秒
+                const maxWaitTime = 30000;
+                const startTime = Date.now();
+                
+                while (Date.now() - startTime < maxWaitTime) {
+                    await this.sleep(2000);
+                    
+                    // 重新检测是否还有反自动化元素
+                    const currentDetection = await this.detectAntiAutomationEnhanced();
+                    if (!currentDetection.detected) {
+                        this.log('info', '验证已完成');
+                        return true;
+                    }
+                    
+                    // 检查是否有输入框出现（验证完成的标志）
+                    const input = document.querySelector(this.selectors.messageInput);
+                    if (input && this.isElementInteractable(input)) {
+                        this.log('info', '检测到输入框，验证可能已完成');
+                        return true;
+                    }
+                }
+                
+                this.log('warn', '验证等待超时');
+                return false;
+            }
+            
+            // 如果是其他类型的阻止，尝试刷新页面
+            if (antiAutomation.type.includes('blocked') || 
+                antiAutomation.type.includes('forbidden')) {
+                this.log('info', '检测到访问被阻止，尝试刷新页面...');
+                window.location.reload();
+                return false; // 刷新后需要重新初始化
+            }
+            
+            return false;
+            
+        } catch (error) {
+            this.log('error', '处理反自动化检测时出错', error);
+            return false;
         }
     }
 

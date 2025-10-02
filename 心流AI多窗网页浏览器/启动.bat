@@ -1,20 +1,18 @@
 @echo off
 chcp 65001 >nul 2>&1
-title AI Browser - Startup
-
-echo.
-echo ========================================
-echo    AI Browser - Starting Application
-echo ========================================
-echo.
-
-echo Starting AI Browser...
-echo Note: Console output will be in UTF-8 encoding
-echo.
 
 cd /d "%~dp0"
-npm start
 
-echo.
-echo Application closed
-pause
+REM 使用VBS脚本实现完全静默启动
+echo Set objShell = CreateObject("WScript.Shell") > "%temp%\silent_start.vbs"
+echo objShell.CurrentDirectory = "%~dp0" >> "%temp%\silent_start.vbs"
+echo objShell.Run "cmd /c npm start", 0, False >> "%temp%\silent_start.vbs"
+
+REM 执行VBS脚本并立即退出
+cscript //nologo "%temp%\silent_start.vbs"
+
+REM 清理临时文件
+del "%temp%\silent_start.vbs" >nul 2>&1
+
+REM 立即退出，不显示任何信息
+exit
